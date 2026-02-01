@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SkiaSharp;
 
 public static class Program
@@ -7,73 +8,44 @@ public static class Program
     {
         InputData data = InputData.LoadFromJson("input.json");
 
-        Shape2D projected = ProjectShape(data.Model, data.Parameters);
+        Shape2D projected = ProjectShape(data.Model);
 
-        Render(projected, data.Parameters, "output.jpg");
+        projected.Print();
+
+        try
+        {
+            Render(projected, data.Parameters, "output.png");
+        }
+        catch
+        {
+        }
     }
 
-    // =========================
-    // PROJECTION + PRINT
-    // =========================
-    private static Shape2D ProjectShape(Model3D model, RenderParameters parameters)
+    private static Shape2D ProjectShape(Model3D model)
     {
         int n = model.VertexTable.Length;
+        float[][] points = new float[n][];
 
-        float[][] projected = new float[n][];
-        float[][] screen = new float[n][];
-
-        // -------- Projection --------
         for (int i = 0; i < n; i++)
         {
             float x = model.VertexTable[i][0];
             float y = model.VertexTable[i][1];
             float z = model.VertexTable[i][2];
 
-            float xp = x / z;
-            float yp = y / z;
-
-            projected[i] = new float[] { xp, yp };
-        }
-
-        // -------- Print projected vertices --------
-        Console.WriteLine("CUBE:");
-        Console.WriteLine("Projected vertices:");
-        for (int i = 0; i < n; i++)
-        {
-            Console.WriteLine($"[{i}] ({projected[i][0]}, {projected[i][1]})");
-        }
-
-        // -------- Screen transformation --------
-        for (int i = 0; i < n; i++)
-        {
-            float sx = (projected[i][0] - parameters.XMin)
-                        / (parameters.XMax - parameters.XMin)
-                        * parameters.Resolution;
-
-            float sy = (parameters.YMax - projected[i][1])
-                        / (parameters.YMax - parameters.YMin)
-                        * parameters.Resolution;
-
-            screen[i] = new float[] { sx, sy };
-        }
-
-        // -------- Print screen coordinates --------
-        Console.WriteLine("Screen coordinates:");
-        for (int i = 0; i < n; i++)
-        {
-            Console.WriteLine($"[{i}] ({screen[i][0]}, {screen[i][1]})");
+            points[i] = new float[]
+            {
+                x / z,
+                y / z
+            };
         }
 
         return new Shape2D
         {
-            Points = screen,
+            Points = points,
             Lines = model.EdgeTable
         };
     }
 
-    // =========================
-    // RENDER WITH SKIASHARP
-    // =========================
     private static void Render(Shape2D shape, RenderParameters parameters, string outputPath)
     {
         int res = parameters.Resolution;
@@ -86,17 +58,30 @@ public static class Program
         {
             Color = SKColors.Black,
             StrokeWidth = 2,
-            IsAntialias = true
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke
         };
 
-        foreach (var line in shape.Lines)
-        {
-            var p1 = shape.Points[line[0]];
-            var p2 = shape.Points[line[1]];
+        SKPoint[] screen = new SKPoint[shape.Points.Length];
 
+        for (int i = 0; i < shape.Points.Length; i++)
+        {
+            float x = (shape.Points[i][0] - parameters.XMin)
+                        / (parameters.XMax - parameters.XMin)
+                        * res;
+
+            float y = (parameters.YMax - shape.Points[i][1])
+                        / (parameters.YMax - parameters.YMin)
+                        * res;
+
+            screen[i] = new SKPoint(x, y);
+        }
+
+        foreach (var edge in shape.Lines)
+        {
             canvas.DrawLine(
-                p1[0], p1[1],
-                p2[0], p2[1],
+                screen[edge[0]],
+                screen[edge[1]],
                 paint
             );
         }
@@ -105,4 +90,3 @@ public static class Program
         bitmap.Encode(fs, SKEncodedImageFormat.Png, 100);
     }
 }
-
